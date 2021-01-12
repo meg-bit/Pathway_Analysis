@@ -1,0 +1,71 @@
+---
+title: "Pathway enrichment"
+output: html_notebook
+---
+
+## Install required packages
+
+```{r}
+# install required CRAN packages
+for (pkg in c("BiocManager", "data.table", "httr", "FactoMineR")) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install.packages(pkg)
+  }
+}
+
+# install required Bioc packages
+for (pkg in c("org.Hs.eg.db", "ReactomePA")) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    BiocManager::install(pkg, update = FALSE, ask = FALSE)
+  }
+}
+```
+
+## Load packages
+
+```{r}
+library(tidyverse)
+library(httr)
+library(data.table)
+library(ReactomePA)
+```
+
+## Load ranked genes
+
+```{r}
+siggenes <- read_csv("../data/ranked_genes.csv")
+# print(siggenes, n=5)
+```
+
+## Map gene id
+
+```{r}
+# get HGNC gene symbol and entrez ID mapping
+GENE_SYM_ID_LINK_BASE <- "https://www.genenames.org/cgi-bin/download/custom?col=gd_hgnc_id&col=gd_app_sym&col=gd_app_name&col=gd_status&col=gd_prev_sym&col=gd_aliases&col=gd_pub_chrom_map&col=gd_pub_acc_ids&col=gd_pub_ensembl_id&col=gd_pub_eg_id&status=Approved&hgnc_dbtag=on&order_by=gd_app_sym_sort&format=text&submit=submit"
+response <- GET(GENE_SYM_ID_LINK_BASE)
+
+gene_sym_id <- data.frame(fread(text=httr::content(response, "parsed"), header=TRUE),
+                          check.names=FALSE)
+id_mapping <- gene_sym_id[, c("Approved symbol", "NCBI Gene ID")]
+rownames(id_mapping) <- id_mapping$`Approved symbol`
+# head(id_mapping)
+```
+
+## Pathway enrichment analysis
+
+```{r}
+siggenes_id <- id_mapping[siggenes$gene[1:1000], "NCBI Gene ID"] # for top-ranked genes
+# siggenes_id <- id_mapping[siggenes$gene, "NCBI Gene ID"] # for all the genes being ranked
+
+ep <- enrichPathway(siggenes_id, pvalueCutoff = 0.05, readable = TRUE)
+data.frame(ep)
+```
+
+```{r}
+barplot(ep)
+```
+
+```{r}
+cnetplot(ep, categorySize="pvalue", foldChange=siggenes_id)
+```
+
